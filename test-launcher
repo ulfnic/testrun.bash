@@ -9,26 +9,27 @@ help_doc() {
 
 		test-launcher [OPTION]... [FILE]... [DIRECTORY]...
 
-		Each DIRECTORY is assumed to only contain test files intended to be executed.
-		FILE and DIRECTORY is validated before execution.
+		A generic stand-alone script for handling execution and feedback for test files.
 
-		Null characters are allowed in stdout and stderr of tests. Also in stdin --fork-stdin.
+		Each DIRECTORY is assumed to only contain executable FILEs that are tests intended to
+		be executed by this script.
 
-		OPTIONs:
-		  -a|--all         Include files and directories beginning with '.'
-		  -q|--quiet       only script errors, tests and --help will print to stdout or stderr
-		  -r|--recursive   search each DIRECTORY recursively
-
-		  --print-result   (always|failure|success|never)
-		  --print-stdout   (always|failure|success|never)
-		  --print-stderr   (always|failure|success|never)
-
-		  --fork-stdin     Write stdin to a temp file and pipe into all tests
+		Null characters are allowed in stdin (see: -f), and the stdout and stderr of executed test FILEs.
 
 
-		  # -h and -i are cumulative and overwrite each other
-		  -o|--halt-on     (failed_test|missing_test|non_exec|no_tests)
-		  -i|--ignore      (failed_test|missing_test|non_exec|no_tests)
+		Options:
+		  -a|--all           Include files and directories beginning with '.'
+		  -q|--quiet         Only the execution of tests and --help will write to stdout/stderr
+		  -r|--recursive     search each DIRECTORY recursively
+		  -f|--fork-stdin    Write stdin to a temp file and pipe into all tests
+
+		  # -o and -i overwrite each other. They toggle a shared set of attributes to either "halt-on" or "ignore".
+		  -o|--halt-on       (failed_test|missing_test|non_exec|no_tests)
+		  -i|--ignore        (failed_test|missing_test|non_exec|no_tests)
+
+		  --print-result     (always|failure|success|never)
+		  --print-stdout     (always|failure|success|never)
+		  --print-stderr     (always|failure|success|never)
 
 
 		Defaults:
@@ -42,10 +43,10 @@ help_doc() {
 
 
 		Exit status:
-		  0    OK
+		  0    success
 		  1    unmanaged error
 		  2    failed parameter validation
-		  4    failed validation of test files before execution
+		  4    failed validation of test files to be run
 		  8    one or more tests returned an exit code greater than 0
 
 	HelpDoc
@@ -55,7 +56,10 @@ help_doc() {
 
 
 
-# Apply defaults
+# Define defaults
+quiet=
+recursive=
+fork_stdin=
 declare -A halt_on=(
 	['missing_test']=1
 	['failed_test']=1
@@ -64,9 +68,6 @@ print_result='always'
 print_stdout='never'
 print_stderr='failure'
 tmp_dir_root='/tmp'
-fork_stdin=
-recursive=
-quiet=
 
 
 
@@ -86,22 +87,22 @@ while [[ $1 ]]; do
 	case $1 in
 		'--all'|'-a')
             shopt -s dotglob ;;
+		'--quiet'|'-q')
+			quiet=1 ;;
+		'--recursive'|'-r')
+			recursive=1 ;;
+		'--fork-stdin|-f')
+			fork_stdin=1 ;;
+		'--halt-on'|'-o')
+			shift; halt_on["$1"]=1 ;;
+		'--ignore'|'-i')
+			shift; halt_on["$1"]= ;;
 		'--print-result')
 			shift; print_result=$1 ;;
 		'--print-stdout')
 			shift; print_stdout=$1 ;;
 		'--print-stderr')
 			shift; print_stderr=$1 ;;
-		'--halt-on'|'-o')
-			shift; halt_on["$1"]=1 ;;
-		'--ignore'|'-i')
-			shift; halt_on["$1"]= ;;
-		'--recursive'|'-r')
-			recursive=1 ;;
-		'--fork-stdin')
-			fork_stdin=1 ;;
-		'--quiet'|'-q')
-			quiet=1 ;;
 		'--help'|'-h')
 			help_doc 0 ;;
 		'--')
@@ -126,21 +127,32 @@ re='^(always|failure|success|never)$'
 [[ $print_stdout =~ $re ]] || print_stderr 2 '%s\n' 'unrecognized value for --print-stdout: '"$print_stdout"
 [[ $print_stderr =~ $re ]] || print_stderr 2 '%s\n' 'unrecognized value for --print-stderr: '"$print_stderr"
 
+re='^(failed_test|missing_test|non_exec|no_tests)$'
+for prop in "${!halt_on[@]}"; do
+	[[ $prop =~ $re ]] || print_stderr 2 '%s\n' 'unrecognized value of --halt-on or --ignore: '"$prop"
+done
+
 
 
 # Manage/create temp working directory for buffering the stdin and stderr of tests
-umask 0077
 tmp_dir=$tmp_dir_root'/test-launcher__'$$
 [[ -d $tmp_dir ]] && rm -rf "$tmp_dir"
+
+# Delete temp directory on exit
 on_exit() {
 	[[ -d $tmp_dir ]] && rm -rf "$tmp_dir"
 }
 trap on_exit EXIT
+
+# Create temp directory with appropriate permissions
+umask_orig=$(umask)
+umask '0077'
 mkdir "$tmp_dir"
+umask "$umask_orig"
 
 
 
-# Validate paths giving as parameters and put the filepaths to execute into "test_files" array
+# Validate paths provided by the user and extract the filepaths belonging to tests
 shopt -s nullglob globstar
 test_files=()
 for test_path in "${test_paths[@]}"; do
@@ -165,10 +177,8 @@ done
 
 
 
-
-# Write stdin to a file
+# If --fork-stdin is in use, write stdin to a file so it can be written to the stdin of each test
 [[ $fork_stdin ]] && cat /dev/fd/0 > "$tmp_dir"'/stdin'
-
 
 
 
@@ -187,15 +197,16 @@ print_failure() {
 
 
 
-# Execute filepaths stored in the "test_files" array as tests
+# Execute tests
 test_failed=
 for test_path in "${test_files[@]}"; do
 	if [[ $fork_stdin ]]; then
-		cat "$tmp_dir"'/stdin' | "$test_path" 1> "$tmp_dir"'/stdout' 2> "$tmp_dir"'/stderr'
+		"$test_path" 1> "$tmp_dir"'/stdout' 2> "$tmp_dir"'/stderr' < cat "$tmp_dir"'/stdin'
+		exit_code=$?
 	else
-		/bin/sh "$test_path" 1> "$tmp_dir"'/stdout' 2> "$tmp_dir"'/stderr'
+		"$test_path" 1> "$tmp_dir"'/stdout' 2> "$tmp_dir"'/stderr'
+		exit_code=$?
 	fi
-	exit_code=$?
 
 	case $print_result in
 		'always'|'success')
@@ -216,7 +227,6 @@ done
 
 [[ $test_failed ]] && exit 8
 exit 0
-
 
 
 
