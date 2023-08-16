@@ -9,17 +9,22 @@ help_doc() {
 
 		test-launcher [OPTION]... [FILE]... [DIRECTORY]...
 
-		Each DIRECTORY is searched recursively for FILEs and every
+		Each DIRECTORY is assumed to only contain test files intended to be executed.
 		FILE and DIRECTORY is validated before execution.
 
+		Null characters are allowed in stdout and stderr of tests. Also in stdin --fork-stdin.
 
 		OPTIONs:
 		  -a|--all         Include files and directories beginning with '.'
 		  -q|--quiet       only script errors, tests and --help will print to stdout or stderr
+		  -r|--recursive   search each DIRECTORY recursively
 
 		  --print-result   (always|failure|success|never)
 		  --print-stdout   (always|failure|success|never)
 		  --print-stderr   (always|failure|success|never)
+
+		  --fork-stdin     Write stdin to a temp file and pipe into all tests
+
 
 		  # -h and -i are cumulative and overwrite each other
 		  -o|--halt-on     (failed_test|missing_test|non_exec|no_tests)
@@ -59,6 +64,8 @@ print_result='always'
 print_stdout='never'
 print_stderr='failure'
 tmp_dir_root='/tmp'
+fork_stdin=
+recursive=
 quiet=
 
 
@@ -89,6 +96,10 @@ while [[ $1 ]]; do
 			shift; halt_on["$1"]=1 ;;
 		'--ignore'|'-i')
 			shift; halt_on["$1"]= ;;
+		'--recursive'|'-r')
+			recursive=1 ;;
+		'--fork-stdin')
+			fork_stdin=1 ;;
 		'--quiet'|'-q')
 			quiet=1 ;;
 		'--help'|'-h')
@@ -136,7 +147,8 @@ for test_path in "${test_paths[@]}"; do
 	if [[ -x $test_path ]]; then
 
 		if [[ -d $test_path ]]; then
-			for test_path_sub in "$test_path/"**; do
+			[[ $recursive ]] && paths_tmp_arr=("$test_path/"**) || paths_tmp_arr=("$test_path/"*)
+			for test_path_sub in "${paths_tmp_arr[@]}"; do
 				[[ -x $test_path_sub ]] && [[ -f $test_path_sub ]] && test_files+=("$test_path_sub")
 			done
 		else
@@ -150,6 +162,13 @@ for test_path in "${test_paths[@]}"; do
 	[[ ${halt_on['non_exec']} ]] && print_stderr 4 '%s\n' 'test path is not executable: '"$test_path"
 done
 [[ ${halt_on['no_tests']} ]] && [[ ${#test_files[@]} == '0' ]] && print_stderr 4 '%s\n' 'no files to execute'
+
+
+
+
+# Write stdin to a file
+[[ $fork_stdin ]] && cat /dev/fd/0 > "$tmp_dir"'/stdin'
+
 
 
 
@@ -171,7 +190,11 @@ print_failure() {
 # Execute filepaths stored in the "test_files" array as tests
 test_failed=
 for test_path in "${test_files[@]}"; do
-	/bin/sh "$test_path" 1> "$tmp_dir"'/stdout' 2> "$tmp_dir"'/stderr'
+	if [[ $fork_stdin ]]; then
+		cat "$tmp_dir"'/stdin' | "$test_path" 1> "$tmp_dir"'/stdout' 2> "$tmp_dir"'/stderr'
+	else
+		/bin/sh "$test_path" 1> "$tmp_dir"'/stdout' 2> "$tmp_dir"'/stderr'
+	fi
 	exit_code=$?
 
 	case $print_result in
