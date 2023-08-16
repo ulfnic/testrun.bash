@@ -1,0 +1,199 @@
+#!/usr/bin/env bash
+set -o errexit
+[[ $DEBUG ]] && set -x
+
+
+
+help_doc() {
+	cat 1>&2 <<-'HelpDoc'
+
+		test-launcher [OPTION]... [FILE]... [DIRECTORY]...
+
+		Each DIRECTORY is searched recursively for FILEs and every
+		FILE and DIRECTORY is validated before execution.
+
+
+		OPTIONs:
+		  -a|--all         Include files and directories beginning with '.'
+		  -q|--quiet       only script errors, tests and --help will print to stdout or stderr
+
+		  --print-result   (always|failure|success|never)
+		  --print-stdout   (always|failure|success|never)
+		  --print-stderr   (always|failure|success|never)
+
+		  # -h and -i are cumulative and overwrite each other
+		  -o|--halt-on     (failed_test|missing_test|non_exec|no_tests)
+		  -i|--ignore      (failed_test|missing_test|non_exec|no_tests)
+
+
+		Defaults:
+		  --print-result always
+		  --print-stdout never
+		  --print-stderr failure
+		  --halt-on missing_test
+		  --halt-on failed_test
+		  --ignore non_exec
+		  --ignore no_tests
+
+
+		Exit status:
+		  0    OK
+		  1    unmanaged error
+		  2    failed parameter validation
+		  4    failed validation of test files before execution
+		  8    one or more tests returned an exit code greater than 0
+
+	HelpDoc
+	[[ $1 ]] && exit "$1"
+}
+[[ $1 ]] || help_doc 0
+
+
+
+# Apply defaults
+declare -A halt_on=(
+	['missing_test']=1
+	['failed_test']=1
+)
+print_result='always'
+print_stdout='never'
+print_stderr='failure'
+tmp_dir_root='/tmp'
+quiet=
+
+
+
+print_stderr() {
+	if [[ $1 == '0' ]]; then
+		[[ $2 ]] && [[ ! $quiet ]] && printf "$2" "${@:3}" 1>&2 || :
+	else
+		[[ $2 ]] && printf '%s'"$2" "ERROR: ${0##*/}, " "${@:3}" 1>&2 || :
+		exit "$1"
+	fi
+}
+
+
+# Read params
+test_paths=()
+while [[ $1 ]]; do
+	case $1 in
+		'--all'|'-a')
+            shopt -s dotglob ;;
+		'--print-result')
+			shift; print_result=$1 ;;
+		'--print-stdout')
+			shift; print_stdout=$1 ;;
+		'--print-stderr')
+			shift; print_stderr=$1 ;;
+		'--halt-on'|'-o')
+			shift; halt_on["$1"]=1 ;;
+		'--ignore'|'-i')
+			shift; halt_on["$1"]= ;;
+		'--quiet'|'-q')
+			quiet=1 ;;
+		'--help'|'-h')
+			help_doc 0 ;;
+		'--')
+			break ;;
+		'-'*)
+			print_stderr 2 '%s\n' 'unrecognized parameter: '"$1" ;;
+		*)
+			test_paths+=("$1") ;;
+	esac
+	shift
+done
+test_paths+=("$@")
+
+
+
+# Validate parameter values
+[[ ${#test_files[@]} ]] || help_doc 2
+[[ -d $tmp_dir_root ]] || printf '%s\n' 'temp directory doesnt exist: '"$tmp_dir_root"
+
+re='^(always|failure|success|never)$'
+[[ $print_result =~ $re ]] || print_stderr 2 '%s\n' 'unrecognized value for --print-result: '"$print_result"
+[[ $print_stdout =~ $re ]] || print_stderr 2 '%s\n' 'unrecognized value for --print-stdout: '"$print_stdout"
+[[ $print_stderr =~ $re ]] || print_stderr 2 '%s\n' 'unrecognized value for --print-stderr: '"$print_stderr"
+
+
+
+# Manage/create temp working directory for buffering the stdin and stderr of tests
+umask 0077
+tmp_dir=$tmp_dir_root'/test-launcher__'$$
+[[ -d $tmp_dir ]] && rm -rf "$tmp_dir"
+on_exit() {
+	[[ -d $tmp_dir ]] && rm -rf "$tmp_dir"
+}
+trap on_exit EXIT
+mkdir "$tmp_dir"
+
+
+
+# Validate paths giving as parameters and put the filepaths to execute into "test_files" array
+shopt -s nullglob globstar
+test_files=()
+for test_path in "${test_paths[@]}"; do
+	if [[ -x $test_path ]]; then
+
+		if [[ -d $test_path ]]; then
+			for test_path_sub in "$test_path/"**; do
+				[[ -x $test_path_sub ]] && [[ -f $test_path_sub ]] && test_files+=("$test_path_sub")
+			done
+		else
+			test_files+=("$test_path")
+		fi
+		continue
+
+	fi
+
+	[[ ${halt_on['missing_test']} ]] && [[ ! -e $test_path ]] && print_stderr 4 '%s\n' 'test path does not exist: '"$test_path"
+	[[ ${halt_on['non_exec']} ]] && print_stderr 4 '%s\n' 'test path is not executable: '"$test_path"
+done
+[[ ${halt_on['no_tests']} ]] && [[ ${#test_files[@]} == '0' ]] && print_stderr 4 '%s\n' 'no files to execute'
+
+
+
+# Declare functions for printing success/failure conditions of tests
+print_success() {
+	[[ $print_stdout == 'always' || $print_stdout == 'success' ]] && cat "$tmp_dir"'/stdout'
+	[[ $print_stderr == 'always' || $print_stderr == 'success' ]] && cat "$tmp_dir"'/stderr' 1>&2
+	print_stderr 0 '\e[32m%s\e[0m %s\n' "[${exit_code}]" "${test_path@Q}"
+}
+
+print_failure() {
+	[[ $print_stdout == 'always' || $print_stdout == 'failure' ]] && cat "$tmp_dir"'/stdout'
+	[[ $print_stderr == 'always' || $print_stderr == 'failure' ]] && cat "$tmp_dir"'/stderr' 1>&2
+	print_stderr 0 '\e[31m%s\e[0m %s\n' "[${exit_code}]" "${test_path@Q}"
+}
+
+
+
+# Execute filepaths stored in the "test_files" array as tests
+test_failed=
+for test_path in "${test_files[@]}"; do
+	/bin/sh "$test_path" 1> "$tmp_dir"'/stdout' 2> "$tmp_dir"'/stderr'
+	exit_code=$?
+
+	case $print_result in
+		'always'|'success')
+			[[ $exit_code == '0' ]] && print_success
+			;;&
+		'always'|'failure')
+			[[ $exit_code == '0' ]] || print_failure
+			;;
+	esac
+
+	if [[ $exit_code != '0' ]]; then
+		[[ ${halt_on['failed_test']} ]] && exit 8
+		test_failed=1
+	fi
+done
+
+
+
+[[ $test_failed ]] && exit 8
+exit 0
+
+
+
+
