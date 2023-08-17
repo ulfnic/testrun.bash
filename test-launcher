@@ -21,7 +21,8 @@ help_doc() {
 		  -a|--all           Include files and directories beginning with '.'
 		  -q|--quiet         Only the execution of tests and --help will write to stdout/stderr
 		  -r|--recursive     search each DIRECTORY recursively
-		  -f|--fork-stdin    Write stdin to a temp file and pipe into all tests
+		  -f|--fork-stdin    Write stdin into all tests
+		  --dry-run          Print the filepaths to be executed
 
 		  # -o and -i overwrite each other. They toggle a shared set of attributes to either "halt-on" or "ignore".
 		  -o|--halt-on       (failed_test|missing_test|non_exec|no_tests)
@@ -60,6 +61,7 @@ help_doc() {
 quiet=
 recursive=
 fork_stdin=
+dry_run=
 declare -A halt_on=(
 	['missing_test']=1
 	['failed_test']=1
@@ -91,8 +93,10 @@ while [[ $1 ]]; do
 			quiet=1 ;;
 		'--recursive'|'-r')
 			recursive=1 ;;
-		'--fork-stdin|-f')
+		'--fork-stdin'|'-f')
 			fork_stdin=1 ;;
+		'--dry-run')
+			dry_run=1 ;;
 		'--halt-on'|'-o')
 			shift; halt_on["$1"]=1 ;;
 		'--ignore'|'-i')
@@ -177,6 +181,16 @@ done
 
 
 
+# Complete a dry run printing the filepaths to be executed
+if [[ $dry_run ]]; then
+	for path in "${test_files[@]}"; do
+		printf '%q %s\n' "$path"
+	done
+	exit 0
+fi
+
+
+
 # If --fork-stdin is in use, write stdin to a file so it can be written to the stdin of each test
 [[ $fork_stdin ]] && cat /dev/fd/0 > "$tmp_dir"'/stdin'
 
@@ -200,6 +214,8 @@ print_failure() {
 # Execute tests
 test_failed=
 for test_path in "${test_files[@]}"; do
+
+
 	if [[ $fork_stdin ]]; then
 		"$test_path" 1> "$tmp_dir"'/stdout' 2> "$tmp_dir"'/stderr' < cat "$tmp_dir"'/stdin'
 		exit_code=$?
