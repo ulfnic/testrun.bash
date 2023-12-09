@@ -22,18 +22,8 @@ help_doc() {
 		  -q|--quiet         Only the execution of tests and --help will write to stdout/stderr
 		  -p|--params VAL    Contains IFS seperated param(s) to use with all test files, ex: -p '-c=3 -f /my/file'
 		  -F|--fork-stdin    Write stdin into all tests
+		  -e|--fail-exit     Exit on first failed test
 		  --dry-run          Print the filepaths to be executed
-
-		  # -o and -i overwrite each other. They toggle a shared set of attributes.
-		  -o|--halt-on       (failed_test|missing_test|non_exec|no_tests)
-		  -i|--ignore        (failed_test|missing_test|non_exec|no_tests)
-		  
-
-		Defaults:
-		  --halt-on missing_test
-		  --halt-on no_tests
-		  --ignore failed_test
-		  --ignore non_exec
 
 
 		Examples:
@@ -63,11 +53,8 @@ help_doc() {
 quiet=
 test_params=()
 fork_stdin=
+fail_exit=
 dry_run=
-declare -A halt_on=(
-	['missing_test']=1
-	['no_tests']=1
-)
 tmp_dir='/tmp'
 
 
@@ -82,6 +69,7 @@ print_stderr() {
 }
 
 
+
 # Read params
 test_paths=()
 while [[ $1 ]]; do
@@ -92,12 +80,10 @@ while [[ $1 ]]; do
 			shift; test_params=($1) ;;
 		'--fork-stdin'|'-F')
 			fork_stdin=1 ;;
+		'--fail-exit'|'-e')
+			fail_exit=1 ;;
 		'--dry-run')
 			dry_run=1 ;;
-		'--halt-on'|'-o')
-			shift; halt_on["$1"]=1 ;;
-		'--ignore'|'-i')
-			shift; halt_on["$1"]= ;;
 		'--help'|'-h')
 			help_doc 0 ;;
 		'--')
@@ -113,13 +99,9 @@ test_paths+=("$@")
 
 
 
-# Validate parameter values
+# Validate values
 [[ ${#test_files[@]} ]] || help_doc 2
-
-re='^(failed_test|missing_test|non_exec|no_tests)$'
-for prop in "${!halt_on[@]}"; do
-	[[ $prop =~ $re ]] || print_stderr 2 '%s\n' 'unrecognized value of --halt-on or --ignore: '"$prop"
-done
+[[ -d $tmp_dir ]] || printf '%s\n' 'temp directory doesnt exist: '"$tmp_dir"
 
 
 
@@ -127,24 +109,22 @@ done
 shopt -s nullglob globstar
 test_files=()
 for test_path in "${test_paths[@]}"; do
-	if [[ -x $test_path ]]; then
 
-		if [[ -d $test_path ]]; then
-			paths_tmp_arr=("$test_path/"**)
-			for test_path_sub in "${paths_tmp_arr[@]}"; do
-				[[ -x $test_path_sub ]] && [[ -f $test_path_sub ]] && test_files+=("$test_path_sub")
-			done
-		else
-			test_files+=("$test_path")
-		fi
+	[[ -e $test_path ]] || print_stderr 4 '%s\n' 'test path does not exist: '"$test_path"
+	[[ -x $test_path ]] || print_stderr 4 '%s\n' 'test path is not executable: '"$test_path"
+
+	if [[ -d $test_path ]]; then
+		paths_tmp_arr=("$test_path/"**)
+		for test_path_sub in "${paths_tmp_arr[@]}"; do
+			[[ -x $test_path_sub ]] && [[ -f $test_path_sub ]] && test_files+=("$test_path_sub")
+		done
 		continue
-
 	fi
 
-	[[ ${halt_on['missing_test']} ]] && [[ ! -e $test_path ]] && print_stderr 4 '%s\n' 'test path does not exist: '"$test_path"
-	[[ ${halt_on['non_exec']} ]] && print_stderr 4 '%s\n' 'test path is not executable: '"$test_path"
+	test_files+=("$test_path")
+	
 done
-[[ ${halt_on['no_tests']} ]] && [[ ${#test_files[@]} == '0' ]] && print_stderr 4 '%s\n' 'no files to execute'
+[[ ${#test_files[@]} == '0' ]] && print_stderr 4 '%s\n' 'no files to execute'
 
 
 
@@ -187,7 +167,7 @@ for test_path in "${test_files[@]}"; do
 
 	else
 		print_stderr 0 '\e[31m%s\e[0m %s\n' "[${exit_code}]" "${test_path@Q}"
-		[[ ${halt_on['failed_test']} ]] && exit 8
+		[[ $fail_exit ]] && exit 8
 		test_failed=1
 	fi
 done
