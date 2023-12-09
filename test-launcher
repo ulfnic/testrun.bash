@@ -217,11 +217,9 @@ for test_path in "${test_files[@]}"; do
 
 
 	if [[ $fork_stdin ]]; then
-		"$test_path" 1> "$tmp_dir"'/stdout' 2> "$tmp_dir"'/stderr' < cat "$tmp_dir"'/stdin'
-		exit_code=$?
+		"$test_path" 1> "$tmp_dir"'/stdout' 2> "$tmp_dir"'/stderr' < cat "$tmp_dir"'/stdin' && exit_code=$? || exit_code=$?
 	else
-		"$test_path" 1> "$tmp_dir"'/stdout' 2> "$tmp_dir"'/stderr'
-		exit_code=$?
+		"$test_path" 1> "$tmp_dir"'/stdout' 2> "$tmp_dir"'/stderr' && exit_code=$? || exit_code=$?
 	fi
 
 	case $print_result in
