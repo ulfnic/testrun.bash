@@ -8,7 +8,7 @@ set -o errexit
 help_doc() {
 	cat 1>&2 <<-'HelpDoc'
 
-		test-launcher [OPTION]... [FILE]... [DIRECTORY]...
+		testrun.sh [OPTION]... [FILE]... [DIRECTORY]...
 
 		A generic stand-alone script for handling execution and feedback for test files.
 
@@ -47,13 +47,13 @@ help_doc() {
 
 		Examples:
 			# Run all tests in a directory
-			test-launcher ./tests
+			testrun.sh ./tests
 
 			# Run all tests recursively in two different directories
-			test-launcher -r /my/test/dir /my/other-test/dir
+			testrun.sh -r /my/test/dir /my/other-test/dir
 
 			# Fork stdin across all tests
-			printf '%s\n' "hello all tests" | test-launcher -f ./tests
+			printf '%s\n' "hello all tests" | testrun.sh -f ./tests
 
 
 		Exit status:
