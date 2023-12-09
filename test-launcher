@@ -40,8 +40,8 @@ help_doc() {
 		  --print-stderr failure
 		  --halt-on missing_test
 		  --halt-on failed_test
+		  --halt-on no_tests
 		  --ignore non_exec
-		  --ignore no_tests
 
 
 		Exit status:
@@ -67,6 +67,7 @@ dry_run=
 declare -A halt_on=(
 	['missing_test']=1
 	['failed_test']=1
+	['no_tests']=1
 )
 print_result='always'
 print_stdout='never'
