@@ -22,7 +22,7 @@ help_doc() {
 		  -q|--quiet         Only the execution of tests and --help will write to stdout/stderr
 		  -r|--recursive     Search each DIRECTORY recursively
 		  -p|--params VAL    Contains IFS seperated param(s) to use with all test files, ex: -p '-c=3 -f /my/file'
-		  -f|--fork-stdin    Write stdin into all tests
+		  -F|--fork-stdin    Write stdin into all tests
 		  --dry-run          Print the filepaths to be executed
 
 		  # -o and -i overwrite each other. They toggle a shared set of attributes.
@@ -109,7 +109,7 @@ while [[ $1 ]]; do
 			recursive=1 ;;
 		'--params'|'-p')
 			shift; test_params=($1) ;;
-		'--fork-stdin'|'-f')
+		'--fork-stdin'|'-F')
 			fork_stdin=1 ;;
 		'--dry-run')
 			dry_run=1 ;;
