@@ -8,12 +8,13 @@ set -o errexit
 help_doc() {
 	cat 1>&2 <<-'HelpDoc'
 
-		testrun.sh [OPTION]... [FILE]... [DIRECTORY]...
+		testrun.sh [OPTION]... [test-FILE]... [DIRECTORY]...
 
 		A generic stand-alone script for handling execution and feedback for test files.
 
-		Each DIRECTORY is assumed to only contain executable FILEs that are tests intended to
-		be executed by this script.
+		FILEs must be executable and begin with 'test-'
+
+		Each DIRECTORY is searched recursively for executable FILEs beginning with 'test-'
 
 		Null characters are allowed in stdin (see: --fork-stdin)
 
@@ -29,7 +30,7 @@ help_doc() {
 		Examples:
 
 			# Run a test file and all tests recursively in two seperate directories
-			testrun.sh my-test.sh /my/test/dir /my/other-test/dir
+			testrun.sh test-lasers /my/tests /my/other/tests
 
 			# Fork stdin across all tests
 			printf '%s\n' "hello all tests" | testrun.sh -f ./tests
@@ -114,17 +115,18 @@ for test_path in "${test_paths[@]}"; do
 	[[ -x $test_path ]] || print_stderr 4 '%s\n' 'test path is not executable: '"$test_path"
 
 	if [[ -d $test_path ]]; then
-		paths_tmp_arr=("$test_path/"**)
+		paths_tmp_arr=("$test_path/"**'/test-'*)
 		for test_path_sub in "${paths_tmp_arr[@]}"; do
 			[[ -x $test_path_sub ]] && [[ -f $test_path_sub ]] && test_files+=("$test_path_sub")
 		done
 		continue
 	fi
 
+	[[ ${test_path##*/} == 'test-'* ]] || print_stderr 1 '%s\n' 'test files must being with test-'
 	test_files+=("$test_path")
 	
 done
-[[ ${#test_files[@]} == '0' ]] && print_stderr 4 '%s\n' 'no files to execute'
+[[ ${#test_files[@]} == '0' ]] && print_stderr 4 '%s\n' 'no tests to execute'
 
 
 
