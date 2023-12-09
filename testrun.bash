@@ -40,8 +40,8 @@ help_doc() {
 		  --print-stdout never
 		  --print-stderr failure
 		  --halt-on missing_test
-		  --halt-on failed_test
 		  --halt-on no_tests
+		  --ignore failed_test
 		  --ignore non_exec
 
 
@@ -78,7 +78,6 @@ fork_stdin=
 dry_run=
 declare -A halt_on=(
 	['missing_test']=1
-	['failed_test']=1
 	['no_tests']=1
 )
 print_result='always'
