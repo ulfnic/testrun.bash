@@ -20,12 +20,10 @@ help_doc() {
 
 		If an app directory is specified or it has a default, it becomes the active directory before tests are run.
 
-		Null characters are allowed in stdin (see: --fork-stdin)
-
 
 		Options:
 		  -q|--quiet          Only the execution of tests and --help will write to stdout/stderr
-		  -p|--params VAL     Contains IFS seperated param(s) to use with all test files, ex: -p '-c=3 -f /my/file'
+		  -p|--params VAL     IFS seperated parameters to use with all test files
 		  -F|--fork-stdin     Write stdin into all tests
 		  -e|--fail-exit      Exit on first failed test
 		  -a|--app-root-dir   Root directory of the application to cd into prior to running tests
@@ -37,8 +35,8 @@ help_doc() {
 			# Run a test file and all tests recursively in two seperate directories
 			testrun.sh test-lasers /my/tests /my/other/tests
 
-			# Fork stdin across all tests
-			printf '%s\n' "hello all tests" | testrun.sh -f ./tests
+			# Fork stdin and parameters across all tests
+			printf '%s\n' "hello all tests" | testrun.sh -F -p '-c=3 -f /my/file' /my/tests
 
 
 		Exit status:
@@ -129,11 +127,6 @@ fi
 
 
 
-# Validate directories
-[[ -d $tmp_dir ]] || printf '%s\n' 'temp directory doesnt exist: '"$tmp_dir"
-
-
-
 # Validate paths provided by the user and extract the filepaths belonging to tests
 shopt -s nullglob globstar
 test_files=()
@@ -171,9 +164,11 @@ fi
 
 
 
-# If --fork-stdin is in use, write stdin to a temp file so it can be written to the stdin of each test
+# If --fork-stdin is in use, write stdin to a permissioned temp file that's removed on EXIT
 if [[ $fork_stdin ]]; then
-	stdin_cache_path=$tmp_dir'/test-run__in_'$$'_'$EPOCHSECONDS
+	[[ -d $tmp_dir ]] || printf '%s\n' 'temp directory doesnt exist: '"$tmp_dir"
+
+	stdin_cache_path=$tmp_dir'/test-run__in_'$$'_'${EPOCHSECONDS:=$(date +%s)}
 
 	umask_orig=$(umask); umask 0077
 	cat /dev/fd/0 > "$stdin_cache_path"
