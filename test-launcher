@@ -21,6 +21,7 @@ help_doc() {
 		  -a|--all           Include files and directories beginning with '.'
 		  -q|--quiet         Only the execution of tests and --help will write to stdout/stderr
 		  -r|--recursive     search each DIRECTORY recursively
+		  -p|--params VAL    Contains IFS seperated param(s) to use with all test files, ex: -p '-a=3 -b /my/file'
 		  -f|--fork-stdin    Write stdin into all tests
 		  --dry-run          Print the filepaths to be executed
 
@@ -60,6 +61,7 @@ help_doc() {
 # Define defaults
 quiet=
 recursive=
+test_params=()
 fork_stdin=
 dry_run=
 declare -A halt_on=(
@@ -93,6 +95,8 @@ while [[ $1 ]]; do
 			quiet=1 ;;
 		'--recursive'|'-r')
 			recursive=1 ;;
+		'--params'|'-p')
+			shift; test_params=($1) ;;
 		'--fork-stdin'|'-f')
 			fork_stdin=1 ;;
 		'--dry-run')
@@ -183,8 +187,9 @@ done
 
 # Complete a dry run printing the filepaths to be executed
 if [[ $dry_run ]]; then
-	for path in "${test_files[@]}"; do
-		printf '%q %s\n' "$path"
+	for test_path in "${test_files[@]}"; do
+		printf -v test_params_print '%q ' "${test_params[@]}"
+		printf '%q %s\n' "$test_path" "$test_params_print"
 	done
 	exit 0
 fi
@@ -215,11 +220,10 @@ print_failure() {
 test_failed=
 for test_path in "${test_files[@]}"; do
 
-
 	if [[ $fork_stdin ]]; then
-		"$test_path" 1> "$tmp_dir"'/stdout' 2> "$tmp_dir"'/stderr' < cat "$tmp_dir"'/stdin' && exit_code=$? || exit_code=$?
+		"$test_path" "${test_params[@]}" 1> "$tmp_dir"'/stdout' 2> "$tmp_dir"'/stderr' < cat "$tmp_dir"'/stdin' && exit_code=$? || exit_code=$?
 	else
-		"$test_path" 1> "$tmp_dir"'/stdout' 2> "$tmp_dir"'/stderr' && exit_code=$? || exit_code=$?
+		"$test_path" "${test_params[@]}" 1> "$tmp_dir"'/stdout' 2> "$tmp_dir"'/stderr' && exit_code=$? || exit_code=$?
 	fi
 
 	case $print_result in
