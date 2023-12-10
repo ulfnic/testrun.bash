@@ -136,7 +136,7 @@ if [[ ${script_dir##*/} == 'tests' ]]; then
 	[[ ${#test_paths[@]} == 0 ]] && test_paths=("$script_dir"'/'*'/')
 
 else
-	[[ ${#test_paths[@]} == 0 ]] && print_stderr 2 '%s\n' 'No test paths given'
+	[[ ${#test_paths[@]} == 0 ]] && print_stderr 2 '%s\n' 'no test paths given'
 
 fi
 
@@ -171,7 +171,7 @@ for test_path in "${test_paths[@]}"; do
 		test_path=$test_path_dir'/'$test_path_file
 	fi
 
-	[[ ${test_path##*/} == 'test-'* ]] || print_stderr 4 '%s\n' 'test files must being with test-'
+	[[ ${test_path##*/} == 'test-'* ]] || print_stderr 4 '%s\n' 'test filenames must begin with test- :'"$test_path"
 	test_files+=("$test_path")
 	
 done
@@ -194,7 +194,7 @@ fi
 
 # If --fork-stdin is in use, write stdin to a permissioned temp file that's removed on EXIT
 if [[ $fork_stdin ]]; then
-	[[ -d $tmp_dir ]] || print_stderr 1 '%s\n' 'temp directory doesnt exist: '"$tmp_dir"
+	[[ -d $tmp_dir ]] || print_stderr 1 '%s\n' 'temp directory does not exist: '"$tmp_dir"
 
 	stdin_cache_path=$tmp_dir'/test-run__in_'$$'_'${EPOCHSECONDS:=$(date +%s)}
 
