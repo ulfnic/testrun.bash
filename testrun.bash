@@ -60,6 +60,8 @@ fail_exit=
 app_root_dir=
 dry_run=
 tmp_dir='/tmp'
+test_stdout='/dev/fd/1'
+test_stderr='/dev/fd/2'
 
 
 
@@ -79,7 +81,10 @@ test_paths=()
 while [[ $1 ]]; do
 	case $1 in
 		'--quiet'|'-q')
-			quiet=1 ;;
+			quiet=1
+			test_stdout='/dev/null'
+			test_stderr='/dev/null'
+			;;
 		'--params'|'-p')
 			shift; test_params=($1) ;;
 		'--fork-stdin'|'-F')
@@ -196,9 +201,9 @@ test_failed=
 for test_path in "${test_files[@]}"; do
 
 	if [[ $fork_stdin ]]; then
-		"$test_path" "${test_params[@]}" < cat "$tmp_dir"'/stdin' && exit_code=$? || exit_code=$?
+		"$test_path" "${test_params[@]}" 1>"$test_stdout" 2>"$test_stderr" < cat "$tmp_dir"'/stdin' && exit_code=$? || exit_code=$?
 	else
-		"$test_path" "${test_params[@]}" && exit_code=$? || exit_code=$?
+		"$test_path" "${test_params[@]}" 1>"$test_stdout" 2>"$test_stderr" && exit_code=$? || exit_code=$?
 	fi
 
 	if [[ $exit_code == '0' ]]; then
