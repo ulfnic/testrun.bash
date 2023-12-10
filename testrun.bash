@@ -22,12 +22,13 @@ help_doc() {
 
 
 		Options:
-		  -q|--quiet          Only the execution of tests and --help will write to stdout/stderr
-		  -p|--params VAL     IFS seperated parameters to use with all test files
-		  -F|--fork-stdin     Write stdin into all tests
-		  -e|--fail-exit      Exit on first failed test
-		  -a|--app-root-dir   Root directory of the application to cd into prior to running tests
-		  --dry-run           Print the filepaths to be executed
+		  -q|--quiet                Redirect non-errors and all test output to /dev/null
+		  -S|--silence-tests 1|2|b  Redirect test stdout (1), stderr (2), or both (b) to /dev/null
+		  -p|--params VAL           IFS seperated parameters to use with all test files
+		  -F|--fork-stdin           Write stdin into all tests
+		  -e|--fail-exit            Exit on first failed test
+		  -a|--app-root-dir         Root directory of the application to cd into prior to running tests
+		  --dry-run                 Print the filepaths to be executed
 
 
 		Examples:
@@ -84,6 +85,13 @@ while [[ $1 ]]; do
 			quiet=1
 			test_stdout='/dev/null'
 			test_stderr='/dev/null'
+			;;
+		'--silence-tests'|'-S')
+			shift; case $1 in
+				'1'|'b') test_stdout='/dev/null' ;;& '1') ;;
+				'2'|'b') test_stderr='/dev/null' ;;
+				*) print_stderr 2 '%s\n' 'unrecognized silence type: '"$1"
+			esac
 			;;
 		'--params'|'-p')
 			shift; test_params=($1) ;;
