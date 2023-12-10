@@ -60,6 +60,7 @@ fork_stdin=
 fail_exit=
 app_root_dir=
 dry_run=
+script_in_tests_folder=
 tmp_dir='/tmp'
 test_stdout='/dev/fd/1'
 test_stderr='/dev/fd/2'
@@ -123,6 +124,7 @@ script_dir=$(cd -- "${BASH_SOURCE[0]%/*}" && pwd)
 
 # If the directory in which the script resides is named 'tests'
 if [[ ${script_dir##*/} == 'tests' ]]; then
+	script_in_tests_folder=1
 
 	# If not app_root_dir is specified the directory one level up is used
 	if [[ ! $app_root_dir ]]; then
@@ -180,8 +182,10 @@ done
 # Complete a dry run printing the filepaths to be executed
 if [[ $dry_run ]]; then
 	for test_path in "${test_files[@]}"; do
+		test_path_print=$test_path
+		[[ $script_in_tests_folder ]] && [[ $test_path_print == "$script_dir"/* ]] && test_path_print=${test_path_print:${#script_dir}+1}
 		printf -v test_params_print '%q ' "${test_params[@]}"
-		printf '%q %s\n' "$test_path" "$test_params_print"
+		printf '%q %s\n' "$test_path_print" "$test_params_print"
 	done
 	exit 0
 fi
@@ -214,11 +218,14 @@ for test_path in "${test_files[@]}"; do
 		"$test_path" "${test_params[@]}" 1>"$test_stdout" 2>"$test_stderr" && exit_code=$? || exit_code=$?
 	fi
 
+	test_path_print=$test_path
+	[[ $script_in_tests_folder ]] && [[ $test_path_print == "$script_dir"/* ]] && test_path_print=${test_path_print:${#script_dir}+1}
+
 	if [[ $exit_code == '0' ]]; then
-		print_stderr 0 '\e[32m%s\e[0m %s\n' "[${exit_code}]" "${test_path@Q}"
+		print_stderr 0 '\e[32m%s\e[0m %s\n' "[${exit_code}]" "$test_path_print"
 
 	else
-		print_stderr 0 '\e[31m%s\e[0m %s\n' "[${exit_code}]" "${test_path@Q}"
+		print_stderr 0 '\e[31m%s\e[0m %s\n' "[${exit_code}]" "$test_path_print"
 		[[ $fail_exit ]] && exit 8
 		test_failed=1
 	fi
