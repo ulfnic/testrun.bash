@@ -15,7 +15,7 @@ help_doc() {
 		test-FILEs must be executable and begin with 'test-', each DIRECTORY is searched recursively for test-FILEs
 
 		If the directory containing this script is named 'tests':
-		  - --app-root-dir defaults to the parent of the directory containing this script (one level up).
+		  - --app-root-dir defaults to the directory one level up from this script if it contains a .git folder.
 		  - Test paths default to the sub-directories of the directory containing this script.
 
 		If an app directory is specified or it has a default, it becomes the active directory before tests are run.
@@ -126,10 +126,11 @@ script_dir=$(cd -- "${BASH_SOURCE[0]%/*}" && pwd)
 if [[ ${script_dir##*/} == 'tests' ]]; then
 	script_in_tests_folder=1
 
-	# If not app_root_dir is specified the directory one level up is used
+	# If app_root_dir is unspecified the directory one level up is used if it contains a .git file
 	if [[ ! $app_root_dir ]]; then
-		app_root_dir=${script_dir%/*}
-		: ${app_root_dir:='/'}
+		app_root_dir_candidate=${script_dir%/*}
+		: ${app_root_dir_candidate:='/'}
+		[[ -d $app_root_dir_candidate'/.git' ]] && app_root_dir=$app_root_dir_candidate
 	fi
 
 	# If no test paths are specified, the sub-directories of the script's directory become the test paths
