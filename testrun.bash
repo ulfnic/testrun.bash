@@ -41,7 +41,7 @@ help_doc() {
 
 		Exit status:
 		  0    success
-		  1    unmanaged error
+		  1    general error
 		  2    failed parameter validation
 		  4    failed validation of test files to be run
 		  8    one or more tests returned an exit code greater than 0
@@ -106,7 +106,7 @@ test_paths+=("$@")
 
 
 # Determine absolute directory of this script
-script_dir=$(cd -- "${BASH_SOURCE[0]%/*}"; pwd)
+script_dir=$(cd -- "${BASH_SOURCE[0]%/*}" && pwd)
 
 # If the directory in which the script resides is named 'tests'
 if [[ ${script_dir##*/} == 'tests' ]]; then
@@ -121,7 +121,7 @@ if [[ ${script_dir##*/} == 'tests' ]]; then
 	[[ ${#test_paths[@]} == 0 ]] && test_paths=("$script_dir"'/'*'/')
 
 else
-	[[ ${#test_paths[@]} == 0 ]] && print_stderr 1 '%s\n' 'No test paths given'
+	[[ ${#test_paths[@]} == 0 ]] && print_stderr 2 '%s\n' 'No test paths given'
 
 fi
 
@@ -132,12 +132,13 @@ shopt -s nullglob globstar
 test_files=()
 for test_path in "${test_paths[@]}"; do
 
-	test_path=$(cd -- "$PWD/$test_path"; pwd)
-
 	[[ -e $test_path ]] || print_stderr 4 '%s\n' 'test path does not exist: '"$test_path"
 	[[ -x $test_path ]] || print_stderr 4 '%s\n' 'test path is not executable: '"$test_path"
 
 	if [[ -d $test_path ]]; then
+		# Convert directory to absolute path
+		test_path=$(cd -- "$test_path" && pwd)
+
 		paths_tmp_arr=("$test_path/"**'/test-'*)
 		for test_path_sub in "${paths_tmp_arr[@]}"; do
 			[[ -x $test_path_sub ]] && [[ -f $test_path_sub ]] && test_files+=("$test_path_sub")
@@ -145,7 +146,17 @@ for test_path in "${test_paths[@]}"; do
 		continue
 	fi
 
-	[[ ${test_path##*/} == 'test-'* ]] || print_stderr 1 '%s\n' 'test files must being with test-'
+	# Convert file to absolute path
+	test_path_file=${test_path##*/}
+	if [[ $test_path_file == $test_path ]]; then
+		test_path=$PWD'/'$test_path_file
+	else
+		test_path_dir=${test_path%/*}
+		test_path_dir=$(cd -- "$test_path_dir" && pwd)
+		test_path=$test_path_dir'/'$test_path_file
+	fi
+
+	[[ ${test_path##*/} == 'test-'* ]] || print_stderr 4 '%s\n' 'test files must being with test-'
 	test_files+=("$test_path")
 	
 done
@@ -166,7 +177,7 @@ fi
 
 # If --fork-stdin is in use, write stdin to a permissioned temp file that's removed on EXIT
 if [[ $fork_stdin ]]; then
-	[[ -d $tmp_dir ]] || printf '%s\n' 'temp directory doesnt exist: '"$tmp_dir"
+	[[ -d $tmp_dir ]] || print_stderr 1 '%s\n' 'temp directory doesnt exist: '"$tmp_dir"
 
 	stdin_cache_path=$tmp_dir'/test-run__in_'$$'_'${EPOCHSECONDS:=$(date +%s)}
 
