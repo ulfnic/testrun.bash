@@ -130,7 +130,11 @@ if [[ ${script_dir##*/} == 'tests' ]]; then
 	if [[ ! $app_root_dir ]]; then
 		app_root_dir_candidate=${script_dir%/*}
 		: ${app_root_dir_candidate:='/'}
-		[[ -d $app_root_dir_candidate'/.git' ]] && app_root_dir=$app_root_dir_candidate
+		if [[ -d $app_root_dir_candidate'/.git' ]]; then
+			app_root_dir=$app_root_dir_candidate
+		elif [[ -d $app_root_dir_candidate'/app_root/.git' ]]; then
+			app_root_dir=$app_root_dir_candidate'/app_root'
+		fi
 	fi
 
 	# If no test paths are specified, the sub-directories of the script's directory become the test paths
