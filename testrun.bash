@@ -208,11 +208,13 @@ done
 
 # Complete a dry run printing the filepaths to be executed
 if [[ $dry_run ]]; then
+	[[ ${#test_params[@]} == 0 ]] && params_exist= || params_exist=1
 	for test_path in "${test_files[@]}"; do
 		test_path_print=$test_path
 		[[ $tests_dir_absolute ]] && [[ $test_path_print == "$tests_dir_absolute"/* ]] && test_path_print=${test_path_print:${#tests_dir_absolute}+1}
-		printf -v test_params_print '%q ' "${test_params[@]}"
-		printf '%q %s\n' "$test_path_print" "$test_params_print"
+		printf '%q' "$test_path_print"
+		[[ $params_exist ]] && printf ' %q' "${test_params[@]}"
+		printf '\n'
 	done
 	exit 0
 fi
