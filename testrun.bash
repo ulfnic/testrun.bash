@@ -59,8 +59,10 @@ test_params=()
 fork_stdin=
 fail_exit=
 app_root_dir=
+app_root_dir_absolute=
 dry_run=
 script_in_tests_folder=
+tests_dir_absolute=
 tmp_dir='/tmp'
 test_stdout='/dev/fd/1'
 test_stderr='/dev/fd/2'
@@ -119,37 +121,57 @@ test_paths+=("$@")
 
 
 
-# Determine absolute directory of this script
-script_dir=$(cd -- "${BASH_SOURCE[0]%/*}" && pwd)
+# Determine absolute directories for the script and app root
+script_dir_absolute=$(cd -- "${BASH_SOURCE[0]%/*}" && pwd)
+[[ ${script_dir_absolute##*/} == 'tests' ]] && script_in_tests_folder=1
+[[ $app_root_dir ]] && app_root_dir_absolute=$(cd -- "$app_root_dir" && pwd)
 
-# If the directory in which the script resides is named 'tests'
-if [[ ${script_dir##*/} == 'tests' ]]; then
-	script_in_tests_folder=1
 
-	# If app_root_dir is unspecified the directory one level up is used if it contains a .git file
-	if [[ ! $app_root_dir ]]; then
-		app_root_dir_candidate=${script_dir%/*}
-		: ${app_root_dir_candidate:='/'}
-		if [[ -d $app_root_dir_candidate'/.git' ]]; then
-			app_root_dir=$app_root_dir_candidate
-		elif [[ -d $app_root_dir_candidate'/app_root/.git' ]]; then
-			app_root_dir=$app_root_dir_candidate'/app_root'
-		fi
+
+# If an app root directory was specified, attempt to determine the location of a tests/ directory,
+# and if no tests are specified, add tests from that directory.
+if [[ $app_root_dir_absolute ]]; then
+
+	# If this script resides in a tests/ directory
+	if [[ $script_in_tests_folder ]]; then
+		tests_dir_absolute=$script_dir_absolute
+		[[ ${#test_paths[@]} == 0 ]] && test_paths=("$tests_dir_absolute"'/'*'/')
+
+	# If the script isn't in a tests/ directory but the app root directory has a tests/ directory.
+	elif [[ -d $app_root_dir_absolute'/tests' ]]; then
+		tests_dir_absolute=$app_root_dir_absolute'/tests'
+		[[ ${#test_paths[@]} == 0 ]] && test_paths=("$tests_dir_absolute"'/'*'/')
 	fi
 
-	# If no test paths are specified, the sub-directories of the script's directory become the test paths
-	[[ ${#test_paths[@]} == 0 ]] && test_paths=("$script_dir"'/'*'/')
 
-else
-	[[ ${#test_paths[@]} == 0 ]] && print_stderr 2 '%s\n' 'no test paths given'
+
+# If an app root was not specified and the script resides in a tests/ directory, add tests from that
+# directory if none are specified, and attempt to determine the location of the app's root directory.
+elif [[ $script_in_tests_folder ]]; then
+	tests_dir_absolute=$script_dir_absolute
+
+	# If no test paths are specified, the sub-directories of the script's directory become the test paths.
+	[[ ${#test_paths[@]} == 0 ]] && test_paths=("$tests_dir_absolute"'/'*'/')
+
+	# If the directory one level up from the script directory contains a .git/ or app_root/.git/
+	# directory, set the parent of the .git directory as the app's root directory.
+	app_root_dir_candidate=${script_dir_absolute%/*}
+	: ${app_root_dir_candidate:='/'}
+	if [[ -d $app_root_dir_candidate'/.git' ]]; then
+		app_root_dir_absolute=$app_root_dir_candidate
+	elif [[ -d $app_root_dir_candidate'/app_root/.git' ]]; then
+		app_root_dir_absolute=$app_root_dir_candidate'/app_root'
+	fi
 
 fi
 
 
 
 # Validate paths provided by the user and extract the filepaths belonging to tests
+[[ ${#test_paths[@]} == 0 ]] && print_stderr 2 '%s\n' 'no test paths given'
 shopt -s nullglob globstar
 test_files=()
+
 for test_path in "${test_paths[@]}"; do
 
 	[[ -e $test_path ]] || print_stderr 4 '%s\n' 'test path does not exist: '"$test_path"
@@ -188,7 +210,7 @@ done
 if [[ $dry_run ]]; then
 	for test_path in "${test_files[@]}"; do
 		test_path_print=$test_path
-		[[ $script_in_tests_folder ]] && [[ $test_path_print == "$script_dir"/* ]] && test_path_print=${test_path_print:${#script_dir}+1}
+		[[ $tests_dir_absolute ]] && [[ $test_path_print == "$tests_dir_absolute"/* ]] && test_path_print=${test_path_print:${#tests_dir_absolute}+1}
 		printf -v test_params_print '%q ' "${test_params[@]}"
 		printf '%q %s\n' "$test_path_print" "$test_params_print"
 	done
@@ -213,7 +235,7 @@ fi
 
 
 # Execute tests
-cd -- "$app_root_dir"
+cd -- "$app_root_dir_absolute"
 test_failed=
 for test_path in "${test_files[@]}"; do
 
@@ -224,7 +246,7 @@ for test_path in "${test_files[@]}"; do
 	fi
 
 	test_path_print=$test_path
-	[[ $script_in_tests_folder ]] && [[ $test_path_print == "$script_dir"/* ]] && test_path_print=${test_path_print:${#script_dir}+1}
+	[[ $tests_dir_absolute ]] && [[ $test_path_print == "$tests_dir_absolute"/* ]] && test_path_print=${test_path_print:${#tests_dir_absolute}+1}
 
 	if [[ $exit_code == '0' ]]; then
 		print_stderr 0 '\e[32m%s\e[0m %s\n' "[${exit_code}]" "$test_path_print"
