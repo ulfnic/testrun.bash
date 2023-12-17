@@ -22,13 +22,15 @@ help_doc() {
 
 
 		Options:
-		  -q|--quiet                Redirect non-errors and all test output to /dev/null
-		  -S|--silence-tests 1|2|b  Redirect test stdout (1), stderr (2), or both (b) to /dev/null
-		  -p|--params VAL           IFS seperated parameters to use with all test files
-		  -F|--fork-stdin           Write stdin into all tests
-		  -e|--fail-exit            Exit on first failed test
-		  -a|--app-root-dir         Root directory of the application to cd into prior to running tests
-		  --dry-run                 Print the filepaths to be executed
+		  -q|--quiet                 Redirect non-errors and all test output to /dev/null
+		  -S|--silence-tests 1|2|b   Redirect test stdout (1), stderr (2), or both (b) to /dev/null
+		  -p|--params VAL            IFS seperated parameters to use with all test files
+		  -F|--fork-stdin            Write stdin into all tests
+		  -e|--fail-exit             Exit on first failed test
+		  -a|--app-root-dir          Root directory of the application to cd into prior to running tests
+		  -l|--localize-path-output  Localize test paths to the tests/ directory during output
+		  -L|--absolute-path-output  Use absolute paths for tests during output
+		  --dry-run                  Print the filepaths to be executed
 
 
 		Examples:
@@ -60,12 +62,15 @@ fork_stdin=
 fail_exit=
 app_root_dir=
 app_root_dir_absolute=
+test_path_print_as='local'
 dry_run=
 script_in_tests_folder=
 tests_dir_absolute=
 tmp_dir='/tmp'
 test_stdout='/dev/fd/1'
 test_stderr='/dev/fd/2'
+readonly local_dir=$PWD
+readonly local_dir_len=${#local_dir}
 
 
 
@@ -104,6 +109,12 @@ while [[ $1 ]]; do
 			fail_exit=1 ;;
 		'--app-root-dir'|'-a')
 			shift; app_root_dir=$1 ;;
+		'--app-root-dir'|'-a')
+			shift; app_root_dir=$1 ;;
+		'--localize-path-output'|'-l')
+			test_path_print_as='test-local' ;;
+		'--absolute-path-output'|'-L')
+			test_path_print_as='absolute' ;;
 		'--dry-run')
 			dry_run=1 ;;
 		'--help'|'-h')
@@ -167,6 +178,11 @@ fi
 
 
 
+readonly tests_dir_absolute
+[[ $tests_dir_absolute_len ]] && readonly tests_dir_absolute_len=${#tests_dir_absolute}
+
+
+
 # Validate paths provided by the user and extract the filepaths belonging to tests
 [[ ${#test_paths[@]} == 0 ]] && print_stderr 2 '%s\n' 'no test paths given'
 shopt -s nullglob globstar
@@ -206,12 +222,26 @@ done
 
 
 
+format_test_path_print() {
+	# Variable 'test_path_print' is expected to contain the absolute path of a test file
+	case $test_path_print_as in
+		'local')
+			[[ $test_path_print == "$local_dir"/* ]] && test_path_print='./'${test_path_print:local_dir_len+1} ;;
+		'test-local')
+			[[ $test_path_print == "$tests_dir_absolute"/* ]] && test_path_print=${test_path_print:tests_dir_absolute_len+1} ;;
+	esac
+}
+
+
+
 # Complete a dry run printing the filepaths to be executed
 if [[ $dry_run ]]; then
 	[[ ${#test_params[@]} == 0 ]] && params_exist= || params_exist=1
 	for test_path in "${test_files[@]}"; do
+
 		test_path_print=$test_path
-		[[ $tests_dir_absolute ]] && [[ $test_path_print == "$tests_dir_absolute"/* ]] && test_path_print=${test_path_print:${#tests_dir_absolute}+1}
+		format_test_path_print
+
 		printf '%q' "$test_path_print"
 		[[ $params_exist ]] && printf ' %q' "${test_params[@]}"
 		printf '\n'
@@ -247,8 +277,10 @@ for test_path in "${test_files[@]}"; do
 		"$test_path" "${test_params[@]}" 1>"$test_stdout" 2>"$test_stderr" && exit_code=$? || exit_code=$?
 	fi
 
+
 	test_path_print=$test_path
-	[[ $tests_dir_absolute ]] && [[ $test_path_print == "$tests_dir_absolute"/* ]] && test_path_print=${test_path_print:${#tests_dir_absolute}+1}
+	format_test_path_print
+
 
 	if [[ $exit_code == '0' ]]; then
 		print_stderr 0 '\e[32m%s\e[0m %s\n' "[${exit_code}]" "$test_path_print"
